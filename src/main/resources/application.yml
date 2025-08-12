@@ -1,0 +1,44 @@
+server:
+  servlet:
+    context-path: /imogo
+  port: '8181'
+spring:
+  security:
+    oauth2:
+      client:
+        registration:
+          google:
+            client-id: ${GOOGLE_CLIENT_ID}
+            client-secret: ${GOOGLE_CLIENT_SECRET}
+            redirect-uri: "{baseUrl}/login/oauth2/code/{registrationId}"
+            scope:
+              - openid
+              - profile
+              - email
+        provider:
+          google:
+            authorization-uri: https://accounts.google.com/o/oauth2/v2/auth
+            token-uri: https://oauth2.googleapis.com/token
+            user-info-uri: https://www.googleapis.com/oauth2/v3/userinfo
+            user-name-attribute: sub
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    username: imogo
+    initialization-mode: always
+    url: jdbc:mysql://localhost:3306/imogo
+    password: '29367253'
+  application:
+    name: imogo-backend
+  jpa:
+    database-platform: org.hibernate.dialect.MySQL8Dialect
+    show-sql: 'true'
+    hibernate:
+      ddl-auto: create
+  jackson:
+    serialization:
+      fail-on-empty-beans: 'false'
+app:
+  jwt:
+    secret: my-secret-key-jwt12345678901234567890
+    expiration: 3600000  # 1 hora em milissegundos
+    redirect: http://localhost:3000/oauth-success
