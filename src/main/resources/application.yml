@@ -3,13 +3,18 @@ server:
     context-path: /imogo
   port: '8181'
 spring:
+  rabbitmq:
+    host: localhost
+    port: 5672
+    username: admin
+    password: admin
   security:
     oauth2:
       client:
         registration:
           google:
-            client-id: ${GOOGLE_CLIENT_ID}
-            client-secret: ${GOOGLE_CLIENT_SECRET}
+            client-id: ${CLIENT_ID}
+            client-secret: ${CLIENT_SECRET}
             redirect-uri: "{baseUrl}/login/oauth2/code/{registrationId}"
             scope:
               - openid
@@ -41,4 +46,4 @@ app:
   jwt:
     secret: my-secret-key-jwt12345678901234567890
     expiration: 3600000  # 1 hora em milissegundos
-    redirect: http://localhost:3000/oauth-success
+    redirect: http://localhost:3000/user-type-selection

@@ -2,6 +2,7 @@ package com.imogo.imogo_backend.config;
 
 import com.imogo.imogo_backend.model.User;
 import com.imogo.imogo_backend.repository.UserRepository;
+import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -43,11 +44,31 @@ public class CustomOAuth2SuccessHandler implements AuthenticationSuccessHandler 
                     return userRepo.save(newUser);
                 });
 
-        String token = jwtUtil.generateToken(user);
+        String redirectTarget;
         if (user.getRole() == null) {
-            response.sendRedirect(redirectUrl + "/choose-role?token=" + token);
+            String tempToken = jwtUtil.generateTempToken(user);
+            Cookie jwtCookie = new Cookie("jwt", tempToken);
+            jwtCookie.setHttpOnly(true);
+            jwtCookie.setSecure(false); // true em produção
+            jwtCookie.setPath("/");
+            jwtCookie.setMaxAge(60 * 60);
+            response.addCookie(jwtCookie);
+
+            redirectTarget = redirectUrl;
         } else {
-            response.sendRedirect(redirectUrl + "?token=" + token);
+            String finalToken = jwtUtil.generateTokenWithRole(user, user.getRole());
+            Cookie jwtCookie = new Cookie("jwt", finalToken);
+            jwtCookie.setHttpOnly(true);
+            jwtCookie.setSecure(false);
+            jwtCookie.setPath("/");
+            jwtCookie.setMaxAge(60 * 60);
+            response.addCookie(jwtCookie);
+            switch (user.getRole()) {
+                case "AGENT" -> redirectTarget = "http://localhost:3000/admin";
+                case "CLIENT" -> redirectTarget = "http://localhost:3000/profile";
+                default -> redirectTarget = redirectUrl; // fallback
+            }
         }
+        response.sendRedirect(redirectTarget);
     }
 }

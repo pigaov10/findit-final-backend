@@ -32,6 +32,13 @@ public class PropertyController {
         return propertyService.getAllProperties(page, size);
     }
 
+    @GetMapping("/ia")
+    @Operation(summary = "Get all properties by IA", description = "Fetches all properties from the database")
+    public ResponseEntity<String> getAllPropertiesIA(@RequestParam String query) {
+        propertyService.getPropertiesByIA(query);
+        return ResponseEntity.ok().body("ol");
+    }
+
     @GetMapping("/{id}")
     public ResponseEntity<ImobPropertyResponseDTO> getPropertyById(@PathVariable Long id) {
         Optional<ImobPropertyResponseDTO> property = propertyService.getPropertyById(id);

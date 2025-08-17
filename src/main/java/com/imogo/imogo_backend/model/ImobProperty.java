@@ -16,6 +16,7 @@ import org.hibernate.annotations.UpdateTimestamp;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.UUID;
 
 @Entity
 @Table(name = "property")
@@ -81,6 +82,7 @@ public class ImobProperty {
     @JsonBackReference
     private Agent agent;
 
-    @Column(name = "weaviate_id", length = 36, nullable = true)
+    @Column(name = "weaviate_id", updatable = false, nullable = false, length = 36)
     private String weaviateId;
+
 }

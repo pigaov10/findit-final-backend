@@ -1,23 +1,36 @@
 package com.imogo.imogo_backend.service;
 
+import com.imogo.imogo_backend.controller.VectorResponse;
 import com.imogo.imogo_backend.dto.property.ImobPropertyRequestDTO;
 import com.imogo.imogo_backend.dto.property.ImobPropertyResponseDTO;
+import com.imogo.imogo_backend.events.PropertyEvent;
 import com.imogo.imogo_backend.mapper.ImobPropertyMapper;
 import com.imogo.imogo_backend.model.Agent;
 import com.imogo.imogo_backend.model.ImobProperty;
+import com.imogo.imogo_backend.model.enums.EventType;
 import com.imogo.imogo_backend.repository.AgentRepository;
 import com.imogo.imogo_backend.repository.PropertyRepository;
 import jakarta.persistence.EntityNotFoundException;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
+import org.springframework.amqp.rabbit.core.RabbitTemplate;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
+import org.springframework.web.client.RestTemplate;
+import org.springframework.web.util.UriComponentsBuilder;
 
 import java.io.IOException;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
+import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -31,6 +44,9 @@ public class PropertyService {
     private final AgentRepository agentRepository;
     private final OllamaService ollamaService;
     private final WeaviateService weaviateService;
+    private final RabbitTemplate rabbitTemplate;
+    @Autowired
+    private RestTemplate restTemplate;
 
     @Transactional
     public ImobPropertyResponseDTO saveProperty(ImobPropertyRequestDTO imobPropertyRequestDTO) throws Exception {
@@ -45,29 +61,66 @@ public class PropertyService {
             property.getPropertyImages().forEach(image -> image.setImobProperty(property));
         }
 
+        property.setWeaviateId(UUID.randomUUID().toString());
         ImobProperty savedProperty = propertyRepository.save(property);
         if (savedProperty.getId() == null) {
             throw new IllegalStateException(PROPERTY_NOT_SAVED_MSG);
         }
 
-        float[] embedding = ollamaService.generateEmbedding(savedProperty.getDescription());
-        float[] normalizedEmbedding = normalizeEmbedding(embedding);
-        String weaviateId = UUID.randomUUID().toString();
-
-        try {
-            weaviateService.insertVectorOnly(weaviateId, normalizedEmbedding);
-            savedProperty.setWeaviateId(weaviateId);
-        } catch (Exception e) {
-            throw new RuntimeException("Erro ao salvar propriedade no vetor semântico", e);
-        }
+        PropertyEvent event = new PropertyEvent();
+        event.setId(UUID.fromString(savedProperty.getWeaviateId()));
+        event.setTitle(savedProperty.getTitle());
+        event.setPrice(savedProperty.getPrice().doubleValue());
+        event.setArea(Double.valueOf(savedProperty.getSquareFeet()));
+        event.setBathrooms(savedProperty.getBathrooms());
+        event.setBedrooms(savedProperty.getBedrooms());
+        event.setDistrict("boavista");
+        event.setCity(savedProperty.getCity());
+        event.setEnergyCertificate("A");
+        event.setNearby(List.of("natureza", "praia"));
+        event.setFeatures(List.of("tv", "ar condicionado"));
+        event.setLatitude(savedProperty.getPropertyLocation().getLatitude());
+        event.setLongitude(savedProperty.getPropertyLocation().getLongitude());
+        event.setFloor(2);
+        event.setFurnished(true);
+        event.setCondition("boa");
+        event.setDescription(savedProperty.getDescription());
+        event.setType(EventType.CREATED);
+        event.setPropertyType("Apartamento");
+        event.setYearBuilt(2020);
+        rabbitTemplate.convertAndSend("property-exchange", "property.created", event);
         return imobPropertyMapper.toDTO(savedProperty);
+    }
+
+    public String getPropertiesByIA(String query) {
+        String url = UriComponentsBuilder
+                .fromHttpUrl("http://localhost:8082/weaviate/search")
+                .queryParam("q", "Apartamento T3 pequeno estilo loft sem varanda em boavista")
+                .toUriString();
+        VectorResponse a = restTemplate.getForObject(url, VectorResponse.class);
+        List<String> price = a.getData().getGet().getProperty().stream().map(property -> property.getAdditional().getId()).collect(Collectors.toList());
+        System.out.println(price);
+        return "ola";
+        // Faz a requisição GET
+        //return restTemplate.getForObject(url, String.class);
+        //String encodedQuery = URLEncoder.encode(query, StandardCharsets.UTF_8);
+        //String url = String.format("http://localhost:8082/weaviate/search?q=%s", encodedQuery);
+        //ResponseEntity<Map> vectorR = restTemplate.getForEntity(url, Map.class);
+        //System.out.println(vectorR);
+        //Pageable pageable = PageRequest.of(page, size);
+        //return propertyRepository.findAll(pageable).map(imobPropertyMapper::toDTO);
     }
 
     public Page<ImobPropertyResponseDTO> getAllProperties(int page, int size) {
         Pageable pageable = PageRequest.of(page, size);
-        Page<ImobProperty> resp = propertyRepository.findAll(pageable);
-        Page<ImobPropertyResponseDTO> response = propertyRepository.findAll(pageable).map(imobPropertyMapper::toDTO);
-        return response;
+        String url = UriComponentsBuilder
+                .fromHttpUrl("http://localhost:8082/weaviate/search")
+                .queryParam("q", "Apartamento T3 pequeno estilo loft sem varanda em boavista")
+                .toUriString();
+        VectorResponse responseVector = restTemplate.getForObject(url, VectorResponse.class);
+        List<String> ids = responseVector.getData().getGet().getProperty().stream().map(property -> property.getAdditional().getId()).collect(Collectors.toList());
+        System.out.println(ids);
+        return propertyRepository.findByWeaviateIdIn(ids, pageable).map(imobPropertyMapper::toDTO);
     }
 
     public Optional<ImobPropertyResponseDTO> getPropertyById(Long id) {
